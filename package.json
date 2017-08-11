@@ -1,0 +1,15 @@
+{
+  "name": "ftl_gateway_ros",
+  "version": "1.0.0",
+  "description": "ROS based gateway to a FTL robot",
+  "scripts": {
+    "host": "node scripts/host.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "command-line-args": "^4.0.7",
+    "rosnodejs": "^2.1.0",
+    "winston": "^2.3.1"
+  }
+}
