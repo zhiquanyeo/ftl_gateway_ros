@@ -13,6 +13,11 @@ class FTLRosNode extends EventEmitter {
         .then((rosNode) => {
             logger.info('ROS Node initialized');
 
+            this.d_digitalInSvc = rosNode.advertiseService('/get_digital', 'ftl_msgs/GetDigitalInput', (req, resp) => {
+                logger.info('Got request: ', req);
+                resp.value = 1;
+                return true;
+            })
         });
     }
 }
