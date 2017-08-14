@@ -9,6 +9,7 @@
   "license": "ISC",
   "dependencies": {
     "command-line-args": "^4.0.7",
+    "mockery": "^2.1.0",
     "rosnodejs": "^2.1.0",
     "winston": "^2.3.1"
   }
