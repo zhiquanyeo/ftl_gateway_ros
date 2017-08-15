@@ -2,6 +2,8 @@ const EventEmitter = require('events');
 const logger = require('winston');
 const rosnodejs = require('rosnodejs');
 
+const RobotHostConstants = require('ftl-robot-host').Constants;
+
 // ROS messages
 const std_msgs = rosnodejs.require('std_msgs').msg;
 const ftl_msgs = rosnodejs.require('ftl_msgs');
@@ -22,6 +24,8 @@ const IOMsg = ftl_msgs.msg.IOMsg;
  */
 const IOMsgArray = ftl_msgs.msg.IOMsgArray;
 
+const IOConfigMsg = ftl_msgs.msg.IOConfigMsg;
+
 // === Robot Constants ===
 const ANALOG_MIN_VAL = 0;
 const ANALOG_MAX_VAL = 255; //Change if necessary
@@ -37,6 +41,39 @@ function clampVal(val, min, max) {
         return max;
     }
     return val;
+}
+
+function getPortInfo(portStr) {
+    var ret = {
+        type: 'UNK',
+        channel: -1
+    };
+
+    var chString, ch;
+    var isError = false;
+
+    if (portStr.indexOf('D-') === 0) {
+        ret.type = 'DIGITAL';
+        chString = portStr.substring(2);
+    }
+    else if (portStr.indexOf('A-') === 0) {
+        ret.type = 'ANALOG';
+        chString = portStr.substring(2);
+    }
+    else if (portStr.indexOf('PWM-') === 0) {
+        ret.type = 'PWM';
+        chString = portStr.substring(4);
+    }
+
+    ch = parseInt(chString, 10);
+    if (!isNaN(ch)) {
+        ret.channel = ch;
+    }
+    else {
+        ret.type = 'UNK';
+    }
+
+    return ret;
 }
 
 /**
@@ -95,6 +132,54 @@ class FTLRosNode extends EventEmitter {
      */
     _handleIOConfigRequest(req, resp) {
         logger.info('Config Service got request: ', req);
+        var errors = [];
+        for (var i = 0; i < req.config.length; i++) {
+            var currConfig = req.config[i];
+            var portInfo = getPortInfo(currConfig.port);
+            if (portInfo.type === 'DIGITAL') {
+                // Do the configuration
+                switch (currConfig.config) {
+                    case IOConfigMsg.Constants.DIGITAL_IN: 
+                    case IOConfigMsg.Constants.DIGITAL_IN_PULLDN: {
+                        try {
+                            this.d_robot.configureDigitalPinMode(portInfo.channel, RobotHostConstants.PinModes.INPUT);
+                        }
+                        catch (ex) {
+                            errors.push({
+                                port: currConfig.port,
+                                error: "Error configuring as DIGITAL_IN"
+                            });
+                        }
+                    } break;
+                    case IOConfigMsg.Constants.DIGITAL_IN_PULLUP: {
+                        try {
+                            this.d_robot.configureDigitalPinMode(portInfo.channel, RobotHostConstants.PinModes.INPUT_PULLUP);
+                        }
+                        catch (ex) {
+                            errors.push({
+                                port: currConfig.port,
+                                error: "Error configuring as DIGITAL_IN"
+                            });
+                        }
+                    } break;
+                    case IOConfigMsg.Constants.DIGITAL_OUT: {
+
+                    } break;
+                    default: {
+                        errors.push({
+                            port: currConfig.port,
+                            error: "Invalid Port Configuration Option"
+                        });
+                    }
+                }
+            }
+            else {
+                errors.push({
+                    port: currConfig.port,
+                    error: "Invalid Port Type"
+                });
+            }
+        }
         // Attempt to set up digital pin config on robot
         // TODO Verify that it is a digital pin, and try/catch the call
         return true;
@@ -106,29 +191,21 @@ class FTLRosNode extends EventEmitter {
      * @param {IOMsgArray} data 
      */
     _handleRobotOutputMessage(data) {
+        logger.info('Got message: ', data);
         // Apply the outputs to the robot...
         var outputValues = data.io_msg;
         outputValues.forEach((ioMsg) => {
-            // Determine type
-            var portType = 'UNK';
+            var portInfo = getPortInfo(ioMsg.port);
             var portVal;
-            var channel;
-            if (ioMsg.port.indexOf('D-') === 0) {
-                portType = 'DIGITAL';
-                channel = parseInt(ioMsg.port.substring(2), 10);
+            if (portInfo.type === 'DIGITAL') {
                 portVal = (ioMsg.value === 1);
-                this.d_robot.writeDigital(channel, portVal);
+                this.d_robot.writeDigital(portInfo.channel, portVal);
             }
-            else if (ioMsg.port.indexOf('PWM-') === 0) {
-                portType = 'PWM';
-                channel = parseInt(ioMsg.port.substring(4), 10);
+            else if (portInfo.type === 'PWM') {
                 portVal = clampVal(ioMsg.value, PWM_MIN_VAL, PWM_MAX_VAL);
-                this.d_robot.writePWM(channel, portVal);
+                this.d_robot.writePWM(portInfo.channel, portVal);
             }
-    
-            if (portType === 'UNK') {
-                return;
-            }
+            
         });
 
         // ... and also emit an event for interested external parties
