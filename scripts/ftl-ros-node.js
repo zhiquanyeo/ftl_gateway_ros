@@ -136,34 +136,19 @@ class FTLRosNode extends EventEmitter {
         for (var i = 0; i < req.config.length; i++) {
             var currConfig = req.config[i];
             var portInfo = getPortInfo(currConfig.port);
+            var pinMode = null;
             if (portInfo.type === 'DIGITAL') {
                 // Do the configuration
                 switch (currConfig.config) {
                     case IOConfigMsg.Constants.DIGITAL_IN: 
                     case IOConfigMsg.Constants.DIGITAL_IN_PULLDN: {
-                        try {
-                            this.d_robot.configureDigitalPinMode(portInfo.channel, RobotHostConstants.PinModes.INPUT);
-                        }
-                        catch (ex) {
-                            errors.push({
-                                port: currConfig.port,
-                                error: "Error configuring as DIGITAL_IN"
-                            });
-                        }
+                        pinMode = RobotHostConstants.PinModes.INPUT;
                     } break;
                     case IOConfigMsg.Constants.DIGITAL_IN_PULLUP: {
-                        try {
-                            this.d_robot.configureDigitalPinMode(portInfo.channel, RobotHostConstants.PinModes.INPUT_PULLUP);
-                        }
-                        catch (ex) {
-                            errors.push({
-                                port: currConfig.port,
-                                error: "Error configuring as DIGITAL_IN"
-                            });
-                        }
+                        pinMode = RobotHostConstants.PinModes.INPUT_PULLUP
                     } break;
                     case IOConfigMsg.Constants.DIGITAL_OUT: {
-
+                        pinMode = RobotHostConstants.PinModes.OUTPUT;
                     } break;
                     default: {
                         errors.push({
@@ -172,16 +157,35 @@ class FTLRosNode extends EventEmitter {
                         });
                     }
                 }
+
+                if (pinMode) {
+                    try {
+                        this.d_robot.configureDigitalPinMode(portInfo.channel, pinMode);
+                    }
+                    catch (ex) {
+                        errors.push({
+                            port: currConfig.port,
+                            error: "Error configuring as " + pinMode
+                        });
+                    }
+                }
             }
             else {
                 errors.push({
                     port: currConfig.port,
-                    error: "Invalid Port Type"
+                    error: "Invalid Port Type. Can only configure DIGITAL ports"
                 });
             }
         }
-        // Attempt to set up digital pin config on robot
-        // TODO Verify that it is a digital pin, and try/catch the call
+
+        if (errors.length === 0) {
+            resp.success = true;
+        }
+        else {
+            logger.error("Errors occured while configuring IO: ", errors);
+            resp.success = false;
+        }
+        
         return true;
     }
 
